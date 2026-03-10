@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3. Parti Çerez ile Giriş Doğrulama</title>
+    <style>
+        /* --- Temel Tasarım (Arayüz Düzeni ve Renkler) --- */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f2f5;
+            margin: 0;
+        }
+
+        .login-container {
+            background-color: white;
+            padding: 2.5rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            width: 320px;
+        }
+
+        h2 {
+            margin-top: 0;
+            text-align: center;
+            color: #333;
+            font-size: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #555;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.6rem;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            /* Padding'i genişliğe dahil eder */
+            font-size: 1rem;
+        }
+
+        .form-group input:focus {
+            border-color: #007bff;
+            outline: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.8rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #a0c4ff;
+            cursor: not-allowed;
+        }
+
+        /* Uyarı - Sonuç Mesajı Tasarımı */
+        #result {
+            margin-top: 1.2rem;
+            text-align: center;
+            font-weight: bold;
+            font-size: 0.95rem;
+            padding: 0.5rem;
+            border-radius: 5px;
+            display: none;
+            /* Başlangıçta gizli tut */
+        }
+
+        .success {
+            display: block !important;
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            display: block !important;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="login-container" id="loginFormContainer">
+        <h2>Sisteme Giriş</h2>
+
+        <div class="form-group">
+            <label for="username">Kullanıcı Adı</label>
+            <input type="text" id="username" placeholder="Örn: 12345678" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Şifre</label>
+            <input type="password" id="password" placeholder="Şifreniz" required>
+        </div>
+
+        <button id="loginBtn">Sisteme Giriş Yap</button>
+
+        <!-- İşlem sonucunun yazdırılacağı alan -->
+        <div id="result"></div>
+    </div>
+
+    <!-- Dashboard Ekranı (Başlangıçta Gizli) -->
+    <div class="login-container" id="dashboardContainer" style="display: none; text-align: center;">
+        <h2>Hoşgeldin, <span id="welcomeName"></span>!</h2>
+        <p style="margin-bottom: 1.5rem; color: #555; font-size: 0.95rem;">Sisteme başarıyla giriş yaptınız.</p>
+        <button id="logoutBtn" style="background-color: #dc3545;">Çıkış Yap</button>
+    </div>
+
+    <script>
+        // 1. HTML Elementlerini Javascript tarafında seçiyoruz
+        const loginFormContainer = document.getElementById('loginFormContainer');
+        const dashboardContainer = document.getElementById('dashboardContainer');
+        const welcomeName = document.getElementById('welcomeName');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        const loginBtn = document.getElementById('loginBtn');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const resultDiv = document.getElementById('result');
+
+        // Çıkış Yap Butonu İşlemleri
+        logoutBtn.addEventListener('click', () => {
+            // Ekranları değiştir
+            dashboardContainer.style.display = 'none';
+            loginFormContainer.style.display = 'block';
+
+            // Inputları ve mesajı temizle
+            usernameInput.value = '';
+            passwordInput.value = '';
+            resultDiv.style.display = 'none';
+            welcomeName.textContent = '';
+        });
+
+        // 2. Butona tıklandığında (click) çalışacak asenkron (async) fonksiyon
+        loginBtn.addEventListener('click', async () => {
+            // Inputların sonundaki ve başındaki boşlukları siliyoruz (trim)
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            // Basit validasyon: Boş alan bırakılmış mı?
+            if (!username || !password) {
+                resultDiv.textContent = 'Lütfen kullanıcı adı ve şifre girin.';
+                resultDiv.className = 'error'; // css ile kırmızı göster
+                return;
+            }
+
+            // 3. İstek başladığında UI(Arayüz) kontrolleri
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Doğrulanıyor... Lütfen bekleyin';
+            resultDiv.className = '';
+            resultDiv.style.display = 'none';
+
+            try {
+                // 4. Kendi Node.js (Puppeteer) Backend'imize fetch isteği atıyoruz
+                // Same-Origin Policy (SOP) engeline takılmamak için isteği bizim backend karşılar.
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json' // Veriyi JSON olarak göndereceğimizi belirtiyoruz
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                // 5. Backend'in gönderdiği JSON formatındaki cevabı ayrıştırıyoruz
+                const data = await response.json();
+
+                // 6. Backend'den gelen onaya (data.success) göre sonucu ekrana yazdırıyoruz
+                if (data.success) {
+                    // { success: true, message: "Sisteme giriş sağlandı", username: "..." }
+                    // Giriş başarılı! Formu gizle, paneli göster
+                    loginFormContainer.style.display = 'none';
+                    dashboardContainer.style.display = 'block';
+                    welcomeName.textContent = data.username;
+                } else {
+                    // { success: false, message: "Giriş sağlanmadı ..." }
+                    resultDiv.textContent = data.message;
+                    resultDiv.className = 'error';
+                }
+            } catch (error) {
+                // Sunucu çökerse veya ona ulaşılamazsa çalışacak kod bloğu
+                console.error('Fetch Hatası:', error);
+                resultDiv.textContent = 'Sunucu ile bağlantı kurulamadı.';
+                resultDiv.className = 'error';
+            } finally {
+                // 7. İşlem başarılı da olsa hata da alsa butonu eski haline getir.
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Sisteme Giriş Yap';
+            }
+        });
+    </script>
+
+</body>
+
+</html>
