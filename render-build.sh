@@ -10,7 +10,7 @@ rm -rf .cache/puppeteer
 # Use standard npm install to get dependencies
 npm install
 
-# Force the @puppeteer/browsers library to install Chrome in the local project cache
-npx @puppeteer/browsers install chrome@stable --path .cache/puppeteer
+# Download Chrome to the local cache directory defined in .puppeteerrc.cjs
+npx puppeteer browsers install chrome
 
 echo "Build script completed successfully."

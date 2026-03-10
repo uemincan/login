@@ -1,6 +1,5 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
-const { computeExecutablePath, Browser } = require('@puppeteer/browsers');
 const cors = require('cors');
 const path = require('path');
 
@@ -27,18 +26,9 @@ app.post('/api/login', async (req, res) => {
 
     let browser;
     try {
-        // Render üzerinde Chrome'u bulmak için otomatik yol hesaplama kütüphanesi
-        const executablePath = computeExecutablePath({
-            browser: Browser.CHROME,
-            buildId: 'stable',
-            cacheDir: path.join(__dirname, '.cache', 'puppeteer')
-        });
-
         // 2. Puppeteer ile arka planda gizli (headless) bir tarayıcı başlatıyoruz
         browser = await puppeteer.launch({
             headless: 'new', // Using the new headless mode
-            // Render'ın özel indirdiğimiz Chrome sürümünü kullan
-            executablePath: executablePath || puppeteer.executablePath(),
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
