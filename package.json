@@ -8,6 +8,7 @@
     "render-postbuild": "./render-build.sh"
   },
   "dependencies": {
+    "@puppeteer/browsers": "^2.13.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "puppeteer": "^22.10.0"
