@@ -29,8 +29,8 @@ app.post('/api/login', async (req, res) => {
         // 2. Puppeteer ile arka planda gizli (headless) bir tarayıcı başlatıyoruz
         browser = await puppeteer.launch({
             headless: 'new', // Using the new headless mode
-            // Render üzerindeki path (eğer Puppeteer kendi indiremezse diye)
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath(),
+            // Render'da sistemin kendi Chrome tarayıcısını kullanmak en sağlam yoldur
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
