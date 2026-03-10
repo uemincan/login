@@ -41,63 +41,47 @@ app.post('/api/login', async (req, res) => {
         const page = await browser.newPage();
 
         // 3. Hedef sitenin giriş sayfasına gidin (cats.iku.edu.tr login sayfası)
-        // Not: Direkt portal adresine gitmek yerine formu içeren kesin giriş sayfasına gitmek daha sağlıklıdır
-        await page.goto('https://cats.iku.edu.tr/portal/login', { waitUntil: 'networkidle2' });
+        // Render gibi yavaş ortamlarda timeout süresini uzatıyoruz (60 saniye)
+        await page.goto('https://cats.iku.edu.tr/portal/login', { waitUntil: 'networkidle2', timeout: 60000 });
 
         // 4. Kullanıcı adı ve şifre inputlarını bul ve doldur
-        // ÖNEMLİ: '#eid' ve '#pw' seçicileri (selectors) sitenin kaynak kodlarındaki input'ların id'leridir.
-        // Eğer hedef site bu id'leri değiştirirse, bu kısımların da güncellenmesi gerekir.
+        await page.waitForSelector('#eid', { timeout: 10000 });
         await page.type('#eid', username);
         await page.type('#pw', password);
 
         // 5. Giriş butonuna tıkla ve sunucunun yanıt vermesini (navigasyon) bekle
-        // ÖNEMLİ: '#submit' butonun id'sidir, siteye göre değişiklik gösterebilir.
         await Promise.all([
-            page.click('#submit'),
-            page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(e => console.log('Yönlendirme beklenirken hata veya süre aşımı'))
+            page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }).catch(e => console.log('Yönlendirme beklenirken hata veya süre aşımı')),
+            page.click('#submit')
         ]);
 
         // 6. Başarılı giriş kontrolü
-        // Yöntem A: URL'nin değişip değişmediğini kontrol etme
         const currentUrl = page.url();
-
-        // Yöntem B: Cookies (Çerezleri) kontrol etme
         const cookies = await page.cookies();
 
-        // cats.iku.edu.tr sitesi muhtemelen JSESSIONID isminde bir oturum çerezi bırakır (Sitenin altyapısına göre değişebilir).
-        // Başarılı giriş kriterimizi: "URL artık 'login' içermiyor VEYA geçerli yetkilendirme çerezine (JSESSIONID) sahip" olarak varsayalım.
         const hasSessionCookie = cookies.some(cookie => cookie.name.includes('JSESSIONID') || cookie.name.includes('SAKAI'));
         const isNotOnLoginPage = !currentUrl.includes('login') && !currentUrl.includes('error');
-
-        // Giriş yapılıp yapılmadığına karar verelim
         const isLoggedIn = isNotOnLoginPage && hasSessionCookie;
 
         if (isLoggedIn) {
-            // Başarılı girişten sonra ekrandaki İsim Soyisim bilgisini çekmeye çalışalım
-            // Sakai sistemlerinde genelde profil ismi ".Mrphs-userNav__submenuitem--fullname" veya "#loginLinks a span" gibi yerlerde bulunur.
-            let fullName = username; // Bulamazsak varsayılan olarak numarayı gönderelim
-
+            let fullName = username;
             try {
-                // Sayfanın tamamen yüklenmesi için kısa bir süre tanıyalım
-                await page.waitForSelector('.Mrphs-userNav__submenuitem--fullname', { timeout: 3000 });
+                await page.waitForSelector('.Mrphs-userNav__submenuitem--fullname', { timeout: 5000 });
                 fullName = await page.$eval('.Mrphs-userNav__submenuitem--fullname', el => el.textContent.trim());
             } catch (e) {
-                console.log('İsim soyisim elementi bulunamadı, öğrenci numarası kullanılacak.');
+                console.log('İsim soyisim elementi bulunamadı.');
             }
-
-            // Eğer giriş başarılıysa (Çerezler oluştuysa ve sayfaya girildiyse)
             res.json({ success: true, message: 'Sisteme giriş sağlandı', username: fullName });
         } else {
-            // Hatalı bilgiler, eksik çerez vs.
             res.json({ success: false, message: 'Giriş sağlanmadı (Kullanıcı adı veya şifre hatalı)' });
         }
 
     } catch (error) {
         console.error('Puppeteer İşlem Hatası:', error);
-        res.status(500).json({ success: false, message: 'Arka planda doğrulama yapılırken bir hata oluştu.' });
+        // Hatayı direkt frontend'e göndererek sorunun kaynağını Render'da bulalım
+        res.status(500).json({ success: false, message: `Hata oluştu: ${error.message}` });
     } finally {
         if (browser) {
-            // 7. Tarayıcıyı muhakkak kapat. Aksi takdirde belleği doldurur (Memory Leak)
             await browser.close();
         }
     }
