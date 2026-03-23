@@ -1,5 +1,4 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
 const cors = require('cors');
 const path = require('path');
 
@@ -19,83 +18,47 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
 
-    // 1. Kullanıcı adı ve şifre boşsa hata dön
     if (!username || !password) {
         return res.status(400).json({ success: false, message: 'Kullanıcı adı ve şifre gereklidir.' });
     }
 
-    let browser;
     try {
-        // 2. Puppeteer ile arka planda gizli (headless) bir tarayıcı başlatıyoruz
-        browser = await puppeteer.launch({
-            headless: 'new', // Using the new headless mode
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // Docker/Render ortamlarında bellek limitleri için önemli
-                '--single-process' // Çoğu cloud provider (özellikle ücretsiz planlarda) çok işlemde çöktüğü için
-            ]
+        const loginUrl = 'https://cats.iku.edu.tr/portal/xlogin';
+        const bodyParams = new URLSearchParams({
+            eid: username,
+            pw: password,
+            submit: 'Giriş'
         });
-        const page = await browser.newPage();
 
-        // --- HIZLANDIRMA (Yük sürelerini kısaltmak için gereksizleri engelle) ---
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            const resourceType = req.resourceType();
-            // Sadece HTML ve JavaScript'leri geçir, resim ve CSS'leri engelle
-            if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
-                req.abort();
-            } else {
-                req.continue();
+        // Fetch is native in Node.js 18+ (Render uses 20 by default)
+        const fetchResponse = await fetch(loginUrl, {
+            method: 'POST',
+            body: bodyParams,
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         });
 
-        // 3. Hedef sitenin giriş sayfasına gidin (cats.iku.edu.tr login sayfası)
-        // 'domcontentloaded' kullanarak gereksiz tüm ağın bitmesini beklemiyoruz, sadece kemik HTML yeterli
-        await page.goto('https://cats.iku.edu.tr/portal/login', { waitUntil: 'domcontentloaded', timeout: 60000 });
+        const finalUrl = fetchResponse.url;
+        const html = await fetchResponse.text();
 
-        // 4. Kullanıcı adı ve şifre inputlarını bul ve doldur
-        await page.waitForSelector('#eid', { timeout: 10000 });
-        await page.type('#eid', username);
-        await page.type('#pw', password);
-
-        // 5. Giriş butonuna tıkla ve sunucunun yanıt vermesini (navigasyon) bekle
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(e => console.log('Yönlendirme beklenirken hata veya süre aşımı')),
-            page.click('#submit')
-        ]);
-
-        // 6. Başarılı giriş kontrolü
-        const currentUrl = page.url();
-        const cookies = await page.cookies();
-
-        const hasSessionCookie = cookies.some(cookie => cookie.name.includes('JSESSIONID') || cookie.name.includes('SAKAI'));
-        const isNotOnLoginPage = !currentUrl.includes('login') && !currentUrl.includes('error');
-        const isLoggedIn = isNotOnLoginPage && hasSessionCookie;
+        const isLoggedIn = !finalUrl.includes('login') && !finalUrl.includes('relogin') && !html.includes('Geçersiz giriş');
 
         if (isLoggedIn) {
             let fullName = username;
-            try {
-                await page.waitForSelector('.Mrphs-userNav__submenuitem--fullname', { timeout: 5000 });
-                fullName = await page.$eval('.Mrphs-userNav__submenuitem--fullname', el => el.textContent.trim());
-            } catch (e) {
-                console.log('İsim soyisim elementi bulunamadı.');
+            const nameMatch = html.match(/class="Mrphs-userNav__submenuitem--fullname"\s*>([^<]+)<\/span>/i);
+            if (nameMatch && nameMatch[1]) {
+                fullName = nameMatch[1].trim();
             }
             res.json({ success: true, message: 'Sisteme giriş sağlandı', username: fullName });
         } else {
-            await page.screenshot({ path: require('path').join(__dirname, 'debug_fail.png') });
-            console.log(`Başarısız giriş. URL: ${currentUrl}`);
             res.json({ success: false, message: 'Giriş sağlanmadı (Kullanıcı adı veya şifre hatalı)' });
         }
 
     } catch (error) {
-        console.error('Puppeteer İşlem Hatası:', error);
-        // Hatayı direkt frontend'e göndererek sorunun kaynağını Render'da bulalım
+        console.error('Doğrulama Hatası:', error);
         res.status(500).json({ success: false, message: `Hata oluştu: ${error.message}` });
-    } finally {
-        if (browser) {
-            await browser.close();
-        }
     }
 });
 
