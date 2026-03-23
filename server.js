@@ -38,9 +38,21 @@ app.post('/api/login', async (req, res) => {
         });
         const page = await browser.newPage();
 
+        // --- HIZLANDIRMA (Yük sürelerini kısaltmak için gereksizleri engelle) ---
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const resourceType = req.resourceType();
+            // Sadece HTML ve JavaScript'leri geçir, resim ve CSS'leri engelle
+            if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
+
         // 3. Hedef sitenin giriş sayfasına gidin (cats.iku.edu.tr login sayfası)
-        // Render gibi yavaş ortamlarda timeout süresini uzatıyoruz (60 saniye)
-        await page.goto('https://cats.iku.edu.tr/portal/login', { waitUntil: 'networkidle2', timeout: 60000 });
+        // 'domcontentloaded' kullanarak gereksiz tüm ağın bitmesini beklemiyoruz, sadece kemik HTML yeterli
+        await page.goto('https://cats.iku.edu.tr/portal/login', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
         // 4. Kullanıcı adı ve şifre inputlarını bul ve doldur
         await page.waitForSelector('#eid', { timeout: 10000 });
@@ -49,7 +61,7 @@ app.post('/api/login', async (req, res) => {
 
         // 5. Giriş butonuna tıkla ve sunucunun yanıt vermesini (navigasyon) bekle
         await Promise.all([
-            page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }).catch(e => console.log('Yönlendirme beklenirken hata veya süre aşımı')),
+            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(e => console.log('Yönlendirme beklenirken hata veya süre aşımı')),
             page.click('#submit')
         ]);
 
@@ -71,6 +83,8 @@ app.post('/api/login', async (req, res) => {
             }
             res.json({ success: true, message: 'Sisteme giriş sağlandı', username: fullName });
         } else {
+            await page.screenshot({ path: require('path').join(__dirname, 'debug_fail.png') });
+            console.log(`Başarısız giriş. URL: ${currentUrl}`);
             res.json({ success: false, message: 'Giriş sağlanmadı (Kullanıcı adı veya şifre hatalı)' });
         }
 
