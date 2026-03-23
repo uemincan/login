@@ -30,28 +30,27 @@ app.post('/api/login', async (req, res) => {
             submit: 'Giriş'
         });
 
-        // Fetch is native in Node.js 18+ (Render uses 20 by default)
+        // Yönlendirmeleri (redirect) otomatik takip etmeyi kapatıyoruz (redirect: 'manual').
+        // Böylece başarılı girişte dönen 302 yönlendirmesini beklemek ve ana sayfanın devasa HTML'ini
+        // indirmek zorunda kalmıyoruz. Bu işlem süresini yarı yarıya kısaltacaktır.
         const fetchResponse = await fetch(loginUrl, {
             method: 'POST',
             body: bodyParams,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
+            },
+            redirect: 'manual'
         });
 
-        const finalUrl = fetchResponse.url;
-        const html = await fetchResponse.text();
-
-        const isLoggedIn = !finalUrl.includes('login') && !finalUrl.includes('relogin') && !html.includes('Geçersiz giriş');
+        // Cats sistemi başarılı girişte 302 yönlendirmesi (Redirect) yapar.
+        // Hatalı girişte ise 200 OK ile tekrar login sayfasının HTML'ini döndürür.
+        const isLoggedIn = fetchResponse.status === 302 || fetchResponse.status === 303;
 
         if (isLoggedIn) {
-            let fullName = username;
-            const nameMatch = html.match(/class="Mrphs-userNav__submenuitem--fullname"\s*>([^<]+)<\/span>/i);
-            if (nameMatch && nameMatch[1]) {
-                fullName = nameMatch[1].trim();
-            }
-            res.json({ success: true, message: 'Sisteme giriş sağlandı', username: fullName });
+            // Yönlendirmeyi takip etmediğimiz için sayfa HTML'i elimizde değil, 
+            // bu yüzden İsim Soyisim bilgisini siteden çekemiyoruz. Hız için username'i döndürüyoruz.
+            res.json({ success: true, message: 'Sisteme giriş sağlandı', username: username });
         } else {
             res.json({ success: false, message: 'Giriş sağlanmadı (Kullanıcı adı veya şifre hatalı)' });
         }
